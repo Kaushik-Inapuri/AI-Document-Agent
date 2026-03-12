@@ -2,86 +2,341 @@
 app.py
 ------
 DocMind AI — Intelligent Document Analysis Agent
-Streamlit front-end that ties together all pipeline modules.
-
-Run:
-    streamlit run app.py
+Futuristic Blue Tech UI
 """
 
 import os
 import time
 import streamlit as st
 
-from modules.loader     import load_document
-from modules.chunking   import split_text
-from modules.embeddings import create_embeddings
+from modules.loader      import load_document
+from modules.chunking    import split_text
+from modules.embeddings  import create_embeddings
 from modules.vectorstore import create_vector_db
-from modules.qa_system  import create_qa_chain, ask_question
-from modules.summarizer import summarize_document
-from utils.helpers      import (
+from modules.qa_system   import create_qa_chain, ask_question
+from modules.summarizer  import summarize_document
+from utils.helpers       import (
     format_file_size, estimate_reading_time,
     count_words, ensure_dir,
 )
 
-# ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="DocMind AI — Document Analysis Agent",
-    page_icon="🧠",
+    page_title="DocMind AI",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── Custom styling ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Exo+2:wght@300;400;500;600&family=Share+Tech+Mono&display=swap');
 
+/* ── Base ── */
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-    background: #07070f;
-    color: #dde1ec;
+    font-family: 'Exo 2', sans-serif;
+    background: #020b18;
+    color: #c8e6ff;
 }
-.main { background: #07070f; }
-.block-container { padding: 2rem 2.5rem 5rem; max-width: 1100px; }
-h1 { font-family: 'Syne', sans-serif !important; font-weight: 800 !important; letter-spacing: -1px !important; }
-h2, h3 { font-family: 'Syne', sans-serif !important; font-weight: 700 !important; }
-[data-testid="stSidebar"] { background: #0f0f1a !important; border-right: 1px solid #1e1e30; }
-[data-testid="stSidebar"] .block-container { padding: 1.5rem 1.2rem; }
+.main { background: #020b18; }
+.block-container { padding: 2rem 2.5rem 5rem; max-width: 1200px; }
+
+/* ── Animated background grid ── */
+.main::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-image:
+        linear-gradient(rgba(0,120,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,120,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ── Typography ── */
+h1 {
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 900 !important;
+    letter-spacing: 2px !important;
+    background: linear-gradient(90deg, #00d4ff, #0078ff, #00d4ff);
+    background-size: 200% auto;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    animation: shine 3s linear infinite;
+}
+h2, h3 {
+    font-family: 'Orbitron', monospace !important;
+    font-weight: 700 !important;
+    color: #00d4ff !important;
+}
+@keyframes shine {
+    to { background-position: 200% center; }
+}
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #020d1f 0%, #041428 100%) !important;
+    border-right: 1px solid rgba(0,120,255,0.3) !important;
+    box-shadow: 4px 0 20px rgba(0,120,255,0.1);
+}
+
+/* ── Buttons ── */
 .stButton > button {
-    background: linear-gradient(135deg, #6d28d9, #4338ca) !important;
-    color: #fff !important; border: none !important; border-radius: 9px !important;
-    font-family: 'DM Sans', sans-serif !important; font-weight: 500 !important;
-    padding: 9px 22px !important; transition: opacity 0.15s, transform 0.1s !important;
+    background: transparent !important;
+    color: #00d4ff !important;
+    border: 1px solid #00d4ff !important;
+    border-radius: 4px !important;
+    font-family: 'Orbitron', monospace !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: 1px !important;
+    padding: 10px 24px !important;
+    text-transform: uppercase !important;
+    position: relative !important;
+    overflow: hidden !important;
+    transition: all 0.3s !important;
 }
-.stButton > button:hover { opacity: 0.88 !important; transform: translateY(-1px) !important; }
-.stTextInput > div > div > input, .stTextArea > div > div > textarea {
-    background: #111120 !important; border: 1px solid #252540 !important;
-    color: #dde1ec !important; border-radius: 10px !important;
-    font-family: 'DM Sans', sans-serif !important; font-size: 14px !important;
+.stButton > button::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0; left: -100% !important;
+    width: 100%; height: 100% !important;
+    background: linear-gradient(90deg, transparent, rgba(0,212,255,0.15), transparent) !important;
+    transition: left 0.4s !important;
 }
-.stTabs [data-baseweb="tab-list"] { background: transparent; border-bottom: 1px solid #1e1e30; gap: 4px; }
-.stTabs [data-baseweb="tab"] { font-family: 'DM Sans', sans-serif; font-weight: 500; color: #6b7280; border-radius: 8px 8px 0 0; padding: 8px 18px; }
-.stTabs [aria-selected="true"] { color: #a78bfa !important; background: rgba(109,40,217,0.08) !important; border-bottom: 2px solid #7c3aed !important; }
-.card { background: #111120; border: 1px solid #1e1e30; border-radius: 14px; padding: 20px 24px; margin: 10px 0; }
-.metric-box { flex: 1; background: #111120; border: 1px solid #1e1e30; border-radius: 12px; padding: 16px 12px; text-align: center; }
-.metric-value { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 700; color: #a78bfa; display: block; }
-.metric-label { font-size: 11px; color: #6b7280; margin-top: 4px; display: block; font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 0.5px; }
-.chat-wrap { display: flex; flex-direction: column; gap: 14px; }
-.bubble-user { align-self: flex-end; background: linear-gradient(135deg, #6d28d9, #4338ca); color: #fff; border-radius: 18px 18px 4px 18px; padding: 13px 18px; max-width: 72%; font-size: 14px; line-height: 1.65; box-shadow: 0 4px 20px rgba(109,40,217,0.25); }
-.bubble-bot { align-self: flex-start; background: #111120; border: 1px solid #1e1e30; color: #dde1ec; border-radius: 18px 18px 18px 4px; padding: 13px 18px; max-width: 82%; font-size: 14px; line-height: 1.65; }
-.bubble-label { font-size: 10px; font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; color: #6b7280; }
-.source-pill { display: inline-block; background: rgba(109,40,217,0.12); border: 1px solid rgba(109,40,217,0.25); color: #a78bfa; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-family: 'DM Mono', monospace; margin: 5px 3px 0; }
-.step-row { display: flex; align-items: flex-start; gap: 14px; padding: 10px 0; border-bottom: 1px solid #1a1a2e; }
-.step-num { width: 28px; height: 28px; background: linear-gradient(135deg, #6d28d9, #4338ca); border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: 'DM Mono', monospace; }
-.step-text { font-size: 13px; color: #9ca3af; padding-top: 4px; }
-.divider { border: none; border-top: 1px solid #1e1e30; margin: 18px 0; }
+.stButton > button:hover::before { left: 100% !important; }
+.stButton > button:hover {
+    background: rgba(0,212,255,0.1) !important;
+    box-shadow: 0 0 20px rgba(0,212,255,0.4), inset 0 0 20px rgba(0,212,255,0.05) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Inputs ── */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+    background: rgba(0,20,50,0.8) !important;
+    border: 1px solid rgba(0,120,255,0.4) !important;
+    color: #c8e6ff !important;
+    border-radius: 4px !important;
+    font-family: 'Exo 2', sans-serif !important;
+    font-size: 14px !important;
+    box-shadow: inset 0 0 10px rgba(0,120,255,0.05) !important;
+}
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+    border-color: #00d4ff !important;
+    box-shadow: 0 0 15px rgba(0,212,255,0.25), inset 0 0 10px rgba(0,212,255,0.05) !important;
+}
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: transparent;
+    border-bottom: 1px solid rgba(0,120,255,0.3);
+    gap: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(0,180,255,0.5);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 4px 4px 0 0;
+    padding: 10px 20px;
+}
+.stTabs [aria-selected="true"] {
+    color: #00d4ff !important;
+    background: rgba(0,120,255,0.1) !important;
+    border-bottom: 2px solid #00d4ff !important;
+    text-shadow: 0 0 10px rgba(0,212,255,0.8) !important;
+}
+
+/* ── Cards ── */
+.cyber-card {
+    background: linear-gradient(135deg, rgba(0,20,50,0.9), rgba(0,10,30,0.95));
+    border: 1px solid rgba(0,120,255,0.3);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 10px 0;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0,80,255,0.1), inset 0 1px 0 rgba(0,212,255,0.1);
+}
+.cyber-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg, #00d4ff, #0056ff);
+    border-radius: 6px 0 0 6px;
+}
+
+/* ── Metric boxes ── */
+.metric-box {
+    background: linear-gradient(135deg, rgba(0,20,50,0.9), rgba(0,10,30,0.95));
+    border: 1px solid rgba(0,120,255,0.3);
+    border-radius: 6px;
+    padding: 18px 12px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,80,255,0.1);
+}
+.metric-box::after {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle, rgba(0,120,255,0.05) 0%, transparent 60%);
+    animation: pulse-bg 3s ease-in-out infinite;
+}
+@keyframes pulse-bg {
+    0%, 100% { opacity: 0.5; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+.metric-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: #00d4ff;
+    display: block;
+    text-shadow: 0 0 10px rgba(0,212,255,0.6);
+}
+.metric-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: rgba(0,180,255,0.6);
+    margin-top: 4px;
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ── Chat bubbles ── */
+.bubble-user {
+    background: linear-gradient(135deg, #003d99, #0056cc);
+    color: #fff;
+    border-radius: 12px 12px 2px 12px;
+    padding: 14px 20px;
+    max-width: 70%;
+    font-size: 14px;
+    line-height: 1.7;
+    border: 1px solid rgba(0,150,255,0.4);
+    box-shadow: 0 4px 20px rgba(0,80,255,0.3), 0 0 30px rgba(0,80,255,0.1);
+    position: relative;
+}
+.bubble-bot {
+    background: linear-gradient(135deg, rgba(0,20,50,0.95), rgba(0,15,40,0.98));
+    border: 1px solid rgba(0,120,255,0.3);
+    color: #c8e6ff;
+    border-radius: 12px 12px 12px 2px;
+    padding: 14px 20px;
+    max-width: 80%;
+    font-size: 14px;
+    line-height: 1.7;
+    box-shadow: 0 4px 20px rgba(0,50,150,0.2);
+    position: relative;
+}
+.bubble-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 6px;
+    color: rgba(0,180,255,0.6);
+}
+.source-pill {
+    display: inline-block;
+    background: rgba(0,80,200,0.15);
+    border: 1px solid rgba(0,150,255,0.3);
+    color: #00d4ff;
+    border-radius: 3px;
+    padding: 2px 10px;
+    font-size: 10px;
+    font-family: 'Share Tech Mono', monospace;
+    margin: 5px 3px 0;
+    letter-spacing: 0.5px;
+}
+
+/* ── Step rows ── */
+.step-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0,80,200,0.15);
+}
+.step-num {
+    width: 26px; height: 26px;
+    border: 1px solid #00d4ff;
+    border-radius: 3px;
+    color: #00d4ff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-family: 'Orbitron', monospace;
+    box-shadow: 0 0 8px rgba(0,212,255,0.3);
+}
+.step-num-done {
+    width: 26px; height: 26px;
+    background: rgba(0,212,255,0.15);
+    border: 1px solid #00d4ff;
+    border-radius: 3px;
+    color: #00d4ff;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-family: 'Orbitron', monospace;
+    box-shadow: 0 0 15px rgba(0,212,255,0.5);
+    text-shadow: 0 0 8px rgba(0,212,255,0.8);
+}
+.step-title { font-size: 12px; font-weight: 600; color: #c8e6ff; font-family: 'Exo 2', sans-serif; }
+.step-desc { font-size: 11px; color: rgba(100,180,255,0.6); font-family: 'Share Tech Mono', monospace; margin-top: 2px; }
+.divider { border: none; border-top: 1px solid rgba(0,80,200,0.2); margin: 16px 0; }
+
+/* ── Scanning animation for processing ── */
+@keyframes scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+}
+
+/* ── Glitch text effect ── */
+@keyframes glitch {
+    0%, 100% { text-shadow: 0 0 10px rgba(0,212,255,0.8); }
+    25% { text-shadow: -2px 0 rgba(255,0,100,0.5), 2px 0 rgba(0,255,200,0.5); }
+    75% { text-shadow: 2px 0 rgba(255,0,100,0.5), -2px 0 rgba(0,255,200,0.5); }
+}
+
+/* ── File uploader ── */
+[data-testid="stFileUploader"] {
+    background: rgba(0,20,50,0.5) !important;
+    border: 1px dashed rgba(0,120,255,0.4) !important;
+    border-radius: 6px !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #020b18; }
+::-webkit-scrollbar-thumb { background: rgba(0,120,255,0.4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #00d4ff; }
+
+/* ── Expander ── */
+.streamlit-expanderHeader {
+    background: rgba(0,20,50,0.6) !important;
+    border: 1px solid rgba(0,80,200,0.3) !important;
+    color: #00d4ff !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    font-size: 12px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ── API Key (hardcoded) ────────────────────────────────────────────────────────
+# ── API Key ────────────────────────────────────────────────────────────────────
 api_key = st.secrets["GROQ_API_KEY"]
 
-# ── Session state init ─────────────────────────────────────────────────────────
+# ── Session state ──────────────────────────────────────────────────────────────
 _defaults = {
     "vectorstore":  None,
     "qa_chain":     None,
@@ -98,43 +353,52 @@ for k, v in _defaults.items():
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown(
-        "<h2 style='font-family:Syne,sans-serif;font-size:20px;margin:0 0 2px;'>🧠 DocMind AI</h2>"
-        "<p style='font-size:11px;color:#6b7280;font-family:DM Mono,monospace;margin:0 0 20px;'>"
-        "Document Analysis Agent</p>",
-        unsafe_allow_html=True,
-    )
+    st.markdown("""
+    <div style="padding:16px 0 8px;">
+        <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:900;
+                    color:#00d4ff;text-shadow:0 0 15px rgba(0,212,255,0.7);
+                    letter-spacing:3px;">
+            ⚡ DOCMIND
+        </div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;
+                    color:rgba(0,180,255,0.5);letter-spacing:2px;margin-top:4px;">
+            AI DOCUMENT ANALYSIS SYSTEM v2.0
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
-    # ── File upload ────────────────────────────────────────────────────────────
-    st.markdown("#### 📂 Upload Document")
+    st.markdown("""
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;
+                color:rgba(0,180,255,0.6);text-transform:uppercase;
+                letter-spacing:1px;margin-bottom:8px;">
+        📂 Upload Document
+    </div>
+    """, unsafe_allow_html=True)
+
     uploaded_file = st.file_uploader(
-        "upload",
-        type=["pdf", "docx", "txt"],
+        "upload", type=["pdf", "docx", "txt"],
         label_visibility="collapsed",
-        help="Supported: PDF · DOCX · TXT",
     )
 
     if uploaded_file:
-        if st.button("⚡ Process Document", use_container_width=True):
-            with st.spinner("Step 1/5 — Saving file…"):
+        if st.button("⚡ INITIALIZE DOCUMENT", use_container_width=True):
+            with st.spinner("🔄 Extracting text..."):
                 ensure_dir("data/uploaded_docs")
                 save_path = f"data/uploaded_docs/{uploaded_file.name}"
                 with open(save_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
-
-            with st.spinner("Step 2/5 — Extracting text…"):
                 raw_docs = load_document(save_path)
                 full_text = " ".join(d.page_content for d in raw_docs)
 
-            with st.spinner("Step 3/5 — Chunking text…"):
+            with st.spinner("🔄 Chunking..."):
                 chunks = split_text(raw_docs)
 
-            with st.spinner("Step 4/5 — Generating embeddings…"):
+            with st.spinner("🔄 Generating embeddings..."):
                 embeddings = create_embeddings()
 
-            with st.spinner("Step 5/5 — Building vector store…"):
+            with st.spinner("🔄 Building vector index..."):
                 vs = create_vector_db(chunks, embeddings)
                 qa = create_qa_chain(vs, api_key)
 
@@ -152,77 +416,93 @@ with st.sidebar:
                 "chunks":    len(chunks),
                 "pages":     len(raw_docs),
             }
-            st.success("✅ Document ready! Start asking questions.")
+            st.success("✅ SYSTEM READY")
 
-    # ── Loaded doc info ────────────────────────────────────────────────────────
     if st.session_state.doc_meta:
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         m = st.session_state.doc_meta
         ext = m["name"].rsplit(".", 1)[-1].upper()
         icon = {"PDF": "📄", "DOCX": "📝", "TXT": "📃"}.get(ext, "📄")
         st.markdown(f"""
-        <div class="card" style="padding:14px 16px;">
-            <p style="font-weight:600;font-size:13px;margin:0 0 8px;color:#e2e8f0;">
-                {icon} {m['name']}
-            </p>
-            <p style="font-size:11px;color:#6b7280;margin:0;line-height:1.8;">
-                Size: <b style="color:#9ca3af">{m['size']}</b><br>
-                Words: <b style="color:#9ca3af">{m['words']}</b><br>
-                Pages / sections: <b style="color:#9ca3af">{m['pages']}</b><br>
-                Chunks: <b style="color:#9ca3af">{m['chunks']}</b><br>
-                Est. read time: <b style="color:#9ca3af">{m['read_time']}</b>
-            </p>
+        <div class="cyber-card" style="padding:12px 16px;">
+            <div style="font-family:'Orbitron',monospace;font-size:11px;
+                        color:#00d4ff;margin-bottom:8px;letter-spacing:1px;">
+                {icon} LOADED FILE
+            </div>
+            <div style="font-size:12px;color:#c8e6ff;margin-bottom:6px;
+                        font-family:'Exo 2',sans-serif;word-break:break-all;">
+                {m['name']}
+            </div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;
+                        color:rgba(0,180,255,0.6);line-height:1.9;">
+                SIZE: {m['size']}<br>
+                WORDS: {m['words']}<br>
+                PAGES: {m['pages']}<br>
+                CHUNKS: {m['chunks']}<br>
+                READ TIME: {m['read_time']}
+            </div>
         </div>
         """, unsafe_allow_html=True)
-
-        if st.button("🗑️ Remove Document", use_container_width=True):
+        if st.button("🗑 CLEAR DOCUMENT", use_container_width=True):
             for k, v in _defaults.items():
                 st.session_state[k] = v
             st.rerun()
 
-    # ── Pipeline steps ─────────────────────────────────────────────────────────
     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:11px;color:#6b7280;font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:0.5px;'>RAG Pipeline</p>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;
+                color:rgba(0,180,255,0.5);text-transform:uppercase;
+                letter-spacing:1px;margin-bottom:8px;">
+        RAG Pipeline Status
+    </div>
+    """, unsafe_allow_html=True)
+
     steps = [
-        ("Upload Document",  "PDF · DOCX · TXT accepted"),
-        ("Text Extraction",  "LangChain loaders extract raw text"),
-        ("Text Chunking",    "Split into 600-char overlapping chunks"),
-        ("Embeddings",       "HuggingFace all-MiniLM-L6-v2 model"),
-        ("Vector Store",     "FAISS similarity index built"),
-        ("User Question",    "Natural language query"),
-        ("Similarity Search","Top-5 relevant chunks retrieved"),
-        ("LLM Answer",       "GPT-3.5-turbo generates response"),
+        ("Upload Document",   "PDF · DOCX · TXT"),
+        ("Text Extraction",   "LangChain loaders"),
+        ("Text Chunking",     "600-char chunks"),
+        ("Embeddings",        "MiniLM-L6-v2"),
+        ("Vector Index",      "FAISS similarity"),
+        ("User Question",     "Natural language"),
+        ("Similarity Search", "Top-3 chunks"),
+        ("LLM Answer",        "Groq LLaMA 3.3"),
     ]
     for i, (title, desc) in enumerate(steps, 1):
         done = st.session_state.qa_chain is not None and i <= 5
-        color = "#10b981" if done else "#6d28d9"
+        num_style = "step-num-done" if done else "step-num"
+        icon = "✓" if done else str(i)
         st.markdown(f"""
         <div class="step-row">
-            <div class="step-num" style="background:{color};">{i}</div>
+            <div class="{num_style}">{icon}</div>
             <div>
-                <div style="font-size:12px;font-weight:600;color:#e2e8f0;">{title}</div>
-                <div class="step-text">{desc}</div>
+                <div class="step-title">{title}</div>
+                <div class="step-desc">{desc}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
+# ── Main Header ────────────────────────────────────────────────────────────────
+st.markdown("""
+<div style="margin-bottom:8px;">
+    <h1 style="font-size:42px;margin:0;">⚡ DOCMIND AI</h1>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:12px;
+                color:rgba(0,180,255,0.5);letter-spacing:2px;margin-top:4px;">
+        INTELLIGENT DOCUMENT ANALYSIS SYSTEM // POWERED BY RAG + GROQ
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# ── Main area ──────────────────────────────────────────────────────────────────
-st.markdown(
-    "<h1 style='margin-bottom:4px;font-size:36px;'>🧠 DocMind AI</h1>"
-    "<p style='color:#6b7280;font-size:15px;margin-bottom:28px;'>"
-    "Upload any document — then ask questions, get summaries, and extract key insights using AI.</p>",
-    unsafe_allow_html=True,
-)
+st.markdown("<hr style='border:none;border-top:1px solid rgba(0,120,255,0.3);margin:12px 0 24px;'>", unsafe_allow_html=True)
 
+# ── Metrics ────────────────────────────────────────────────────────────────────
 if st.session_state.doc_meta:
     m = st.session_state.doc_meta
     c1, c2, c3, c4 = st.columns(4)
     for col, val, label in [
-        (c1, m["words"],     "Total Words"),
-        (c2, m["chunks"],    "Text Chunks"),
-        (c3, len(st.session_state.chat_history), "Messages"),
-        (c4, "✅ Ready",     "System"),
+        (c1, m["words"],     "TOTAL WORDS"),
+        (c2, m["chunks"],    "CHUNKS"),
+        (c3, len(st.session_state.chat_history), "MESSAGES"),
+        (c4, "ONLINE",       "SYSTEM"),
     ]:
         with col:
             st.markdown(f"""
@@ -232,35 +512,42 @@ if st.session_state.doc_meta:
             </div>""", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
+# ── Tabs ───────────────────────────────────────────────────────────────────────
 tab_qa, tab_summary, tab_insights, tab_chunks = st.tabs([
-    "💬  Q&A Chat", "📋  Summary", "🔍  Key Insights", "🗂️  Chunks Explorer",
+    "⚡  Q&A INTERFACE",
+    "📋  SUMMARY",
+    "🔍  KEY INSIGHTS",
+    "🗂  CHUNK EXPLORER",
 ])
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Q&A CHAT
+# TAB 1 — Q&A
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_qa:
     if not st.session_state.qa_chain:
         st.markdown("""
-        <div class="card" style="text-align:center;padding:40px;">
-            <div style="font-size:48px;margin-bottom:16px;">📂</div>
-            <h3 style="color:#e2e8f0;margin:0 0 8px;">No document loaded</h3>
-            <p style="color:#6b7280;font-size:14px;margin:0;">
-                Upload a PDF, DOCX, or TXT file in the sidebar and click
-                <b>⚡ Process Document</b> to get started.
-            </p>
+        <div class="cyber-card" style="text-align:center;padding:60px 40px;">
+            <div style="font-size:56px;margin-bottom:20px;">⚡</div>
+            <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:700;
+                        color:#00d4ff;margin-bottom:12px;letter-spacing:2px;">
+                SYSTEM STANDBY
+            </div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:13px;
+                        color:rgba(0,180,255,0.5);">
+                Upload a document and click INITIALIZE to activate the AI engine
+            </div>
         </div>""", unsafe_allow_html=True)
     else:
         if not st.session_state.chat_history:
-            st.markdown(
-                "<p style='font-size:13px;color:#6b7280;margin-bottom:10px;'>"
-                "Try one of these questions or type your own:</p>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("""
+            <div style="font-family:'Share Tech Mono',monospace;font-size:11px;
+                        color:rgba(0,180,255,0.5);margin-bottom:12px;letter-spacing:1px;">
+                ▶ SELECT A QUERY OR TYPE YOUR OWN:
+            </div>""", unsafe_allow_html=True)
             suggestions = [
-                "What is the main topic of this document?",
+                "What is the main topic?",
                 "Summarize the document.",
-                "What are the key points discussed?",
+                "What are the key points?",
                 "What methodology is used?",
                 "What are the conclusions?",
                 "What challenges are mentioned?",
@@ -272,13 +559,14 @@ with tab_qa:
                     st.rerun()
 
         if st.session_state.chat_history:
-            st.markdown('<div class="chat-wrap">', unsafe_allow_html=True)
             for msg in st.session_state.chat_history:
                 if msg["role"] == "user":
                     st.markdown(f"""
-                    <div style="display:flex;justify-content:flex-end;">
+                    <div style="display:flex;justify-content:flex-end;margin:12px 0;">
                         <div>
-                            <div class="bubble-label" style="text-align:right;">You</div>
+                            <div class="bubble-label" style="text-align:right;">
+                                [ USER INPUT ]
+                            </div>
                             <div class="bubble-user">{msg['content']}</div>
                         </div>
                     </div>""", unsafe_allow_html=True)
@@ -286,27 +574,28 @@ with tab_qa:
                     src_pills = ""
                     for i, src in enumerate(msg.get("sources", [])[:3]):
                         page = src.metadata.get("page", "")
-                        label = f"Source {i+1}" + (f" · p.{page}" if page else "")
+                        label = f"SRC-{i+1}" + (f" P.{page}" if page else "")
                         src_pills += f'<span class="source-pill">📌 {label}</span>'
                     st.markdown(f"""
-                    <div style="display:flex;justify-content:flex-start;">
+                    <div style="display:flex;justify-content:flex-start;margin:12px 0;">
                         <div>
-                            <div class="bubble-label">DocMind AI</div>
-                            <div class="bubble-bot">{msg['content']}{('<br>' + src_pills) if src_pills else ''}</div>
+                            <div class="bubble-label">[ DOCMIND AI RESPONSE ]</div>
+                            <div class="bubble-bot">{msg['content']}
+                                {('<div style="margin-top:8px;">' + src_pills + '</div>') if src_pills else ''}
+                            </div>
                         </div>
                     </div>""", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
         col_q, col_btn = st.columns([5, 1])
         with col_q:
             user_q = st.text_input(
-                "question", key="q_input",
-                placeholder="Ask anything about the document…",
+                "q", key="q_input",
+                placeholder="// Enter query...",
                 label_visibility="collapsed",
             )
         with col_btn:
-            send = st.button("Send →", use_container_width=True)
+            send = st.button("SEND", use_container_width=True)
 
         if hasattr(st.session_state, "_pending_q"):
             user_q = st.session_state._pending_q
@@ -315,7 +604,7 @@ with tab_qa:
 
         if send and user_q.strip():
             q = user_q.strip()
-            with st.spinner("Searching document and generating answer…"):
+            with st.spinner("🔄 Processing query..."):
                 result = ask_question(st.session_state.qa_chain, q)
             st.session_state.chat_history.append({"role": "user", "content": q, "sources": []})
             st.session_state.chat_history.append({
@@ -326,7 +615,7 @@ with tab_qa:
             st.rerun()
 
         if st.session_state.chat_history:
-            if st.button("🗑️ Clear Conversation"):
+            if st.button("🗑 CLEAR SESSION"):
                 st.session_state.chat_history = []
                 st.rerun()
 
@@ -335,27 +624,35 @@ with tab_qa:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_summary:
     if not st.session_state.raw_docs:
-        st.info("Upload and process a document first.")
+        st.info("Initialize a document first.")
     else:
-        st.markdown(
-            "<p style='color:#6b7280;font-size:14px;'>"
-            "Generate a structured summary with overview, key points, and conclusions.</p>",
-            unsafe_allow_html=True,
-        )
-        if st.button("✨ Generate Full Summary", use_container_width=False):
-            with st.spinner("Summarizing document…"):
+        st.markdown("""
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;
+                    color:rgba(0,180,255,0.5);margin-bottom:16px;letter-spacing:1px;">
+            ▶ GENERATE FULL DOCUMENT ANALYSIS REPORT
+        </div>""", unsafe_allow_html=True)
+
+        if st.button("⚡ GENERATE SUMMARY REPORT", use_container_width=False):
+            with st.spinner("🔄 Analyzing document... This may take 60-90 seconds for large files."):
                 summary = summarize_document(st.session_state.raw_docs, api_key)
                 st.session_state.summary = summary
 
         if st.session_state.summary:
             st.markdown(f"""
-            <div class="card" style="padding:28px 32px;">
-                {st.session_state.summary.replace(chr(10), '<br>')}
+            <div class="cyber-card" style="padding:28px 32px;">
+                <div style="font-family:'Orbitron',monospace;font-size:12px;
+                            color:#00d4ff;margin-bottom:16px;letter-spacing:2px;">
+                    ── ANALYSIS REPORT ──
+                </div>
+                <div style="font-family:'Exo 2',sans-serif;font-size:14px;
+                            line-height:1.8;color:#c8e6ff;">
+                    {st.session_state.summary.replace(chr(10), '<br>')}
+                </div>
             </div>""", unsafe_allow_html=True)
             st.download_button(
-                "⬇️ Download Summary (.txt)",
+                "⬇ EXPORT REPORT (.txt)",
                 data=st.session_state.summary,
-                file_name=f"summary_{st.session_state.doc_meta['name']}.txt",
+                file_name=f"report_{st.session_state.doc_meta['name']}.txt",
                 mime="text/plain",
             )
 
@@ -364,20 +661,21 @@ with tab_summary:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_insights:
     if not st.session_state.qa_chain:
-        st.info("Upload and process a document first.")
+        st.info("Initialize a document first.")
     else:
-        st.markdown(
-            "<p style='color:#6b7280;font-size:14px;'>"
-            "Auto-generate structured insights about the document.</p>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("""
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;
+                    color:rgba(0,180,255,0.5);margin-bottom:16px;letter-spacing:1px;">
+            ▶ SELECT INSIGHT MODULES TO EXTRACT:
+        </div>""", unsafe_allow_html=True)
+
         insight_questions = {
-            "🎯 Main Topic":      "What is the main topic or purpose of this document?",
-            "🔑 Key Points":      "List the most important key points discussed in this document.",
-            "📊 Data & Findings": "What data, statistics, or findings are presented in this document?",
-            "⚠️ Challenges":      "What challenges, limitations, or problems are discussed?",
-            "✅ Conclusions":     "What are the main conclusions or recommendations of this document?",
-            "🔬 Methodology":     "What methodology, approach, or techniques are described?",
+            "🎯 MAIN TOPIC":      "What is the main topic or purpose of this document?",
+            "🔑 KEY POINTS":      "List the most important key points discussed in this document.",
+            "📊 DATA & FINDINGS": "What data, statistics, or findings are presented?",
+            "⚠ CHALLENGES":      "What challenges, limitations, or problems are discussed?",
+            "✅ CONCLUSIONS":     "What are the main conclusions or recommendations?",
+            "🔬 METHODOLOGY":     "What methodology, approach, or techniques are described?",
         }
         col1, col2 = st.columns(2)
         selected = {}
@@ -385,45 +683,49 @@ with tab_insights:
             col = col1 if i % 2 == 0 else col2
             selected[label] = col.checkbox(label, value=True, key=f"chk_{i}")
 
-        if st.button("🚀 Extract Insights", use_container_width=False):
+        if st.button("⚡ EXTRACT INSIGHTS", use_container_width=False):
             chosen = {k: v for k, v in insight_questions.items() if selected.get(k)}
             if not chosen:
-                st.warning("Select at least one insight type.")
+                st.warning("Select at least one module.")
             else:
                 for label, question in chosen.items():
-                    with st.spinner(f"Extracting: {label}…"):
+                    with st.spinner(f"🔄 Extracting {label}..."):
                         result = ask_question(st.session_state.qa_chain, question)
                     st.markdown(f"""
-                    <div class="card">
-                        <p style="font-family:Syne,sans-serif;font-weight:700;font-size:15px;
-                                  margin:0 0 10px;color:#a78bfa;">{label}</p>
-                        <p style="font-size:14px;line-height:1.7;margin:0;color:#dde1ec;">
+                    <div class="cyber-card">
+                        <div style="font-family:'Orbitron',monospace;font-weight:700;
+                                    font-size:12px;margin-bottom:10px;color:#00d4ff;
+                                    letter-spacing:1px;">{label}</div>
+                        <div style="font-size:14px;line-height:1.7;color:#c8e6ff;
+                                    font-family:'Exo 2',sans-serif;">
                             {result['answer']}
-                        </p>
+                        </div>
                     </div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — CHUNKS EXPLORER
+# TAB 4 — CHUNKS
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_chunks:
     if not st.session_state.all_chunks:
-        st.info("Upload and process a document first.")
+        st.info("Initialize a document first.")
     else:
         chunks = st.session_state.all_chunks
-        st.markdown(
-            f"<p style='color:#6b7280;font-size:14px;'>"
-            f"Document split into <b style='color:#a78bfa'>{len(chunks)} chunks</b>.</p>",
-            unsafe_allow_html=True,
-        )
-        search = st.text_input("🔎 Filter chunks by keyword", placeholder="e.g. methodology")
+        st.markdown(f"""
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;
+                    color:rgba(0,180,255,0.5);margin-bottom:16px;letter-spacing:1px;">
+            ▶ VECTOR INDEX: <span style="color:#00d4ff;">{len(chunks)} CHUNKS</span> LOADED
+        </div>""", unsafe_allow_html=True)
+
+        search = st.text_input("🔎 Filter by keyword", placeholder="// search chunks...")
         filtered = [c for c in chunks if not search or search.lower() in c.page_content.lower()]
-        st.markdown(
-            f"<p style='font-size:12px;color:#6b7280;'>"
-            f"Showing {min(15, len(filtered))} of {len(filtered)} matching chunks</p>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;
+                    color:rgba(0,180,255,0.4);margin-bottom:8px;">
+            SHOWING {min(15, len(filtered))} OF {len(filtered)} RESULTS
+        </div>""", unsafe_allow_html=True)
+
         for i, chunk in enumerate(filtered[:15]):
             page = chunk.metadata.get("page", "—")
             src  = chunk.metadata.get("source", "document")
-            with st.expander(f"Chunk {i+1}   ·   {len(chunk.page_content)} chars   ·   {src}   ·   page {page}"):
-                st.text(chunk.page_content)
+            with st.expander(f"CHUNK-{i+1:03d}  //  {len(chunk.page_content)} chars  //  {src}  //  page {page}"):
+                st.code(chunk.page_content, language=None)
